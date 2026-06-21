@@ -1,0 +1,118 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release Build
+    runs-on: macos-14
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: '15.2'
+        
+    - name: Get Version from Tag
+      id: version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Install Dependencies
+      run: |
+        xcodebuild -resolvePackageDependencies -project AnichinApp.xcodeproj -scheme AnichinApp
+    
+    - name: Build & Archive
+      run: |
+        xcodebuild archive \
+          -project AnichinApp.xcodeproj \
+          -scheme AnichinApp \
+          -configuration Release \
+          -archivePath ./build/AnichinApp.xcarchive \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+    
+    - name: Export IPA
+      run: |
+        xcodebuild -exportArchive \
+          -archivePath ./build/AnichinApp.xcarchive \
+          -exportPath ./build \
+          -exportOptionsPlist ExportOptions.plist
+        
+        mkdir -p ./release
+        find ./build -name "*.ipa" -exec cp {} ./release/AnichinApp-v${{ steps.version.outputs.version }}.ipa \;
+    
+    - name: Generate Checksums
+      run: |
+        cd release
+        shasum -a 256 *.ipa > checksums.txt
+        cat checksums.txt
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Anichin iOS ${{ steps.version.outputs.version }}
+        body: |
+          ## 🎬 Anichin iOS Release ${{ steps.version.outputs.version }}
+          
+          ### 📱 Installation Instructions
+          
+          **Method 1: Scarlet**
+          1. Download `AnichinApp-v${{ steps.version.outputs.version }}.ipa`
+          2. Transfer to iPhone
+          3. Open Scarlet → Import IPA
+          4. Install & Trust certificate
+          
+          **Method 2: AltStore**
+          1. Download IPA
+          2. Open in AltStore
+          3. Install to device
+          
+          **Method 3: Sideloadly**
+          1. Download IPA
+          2. Connect iPhone to PC/Mac
+          3. Use Sideloadly to install
+          
+          ### ✨ Features
+          - 🎬 Stream donghua dari Anichin.moe
+          - 📥 Download untuk offline viewing
+          - ❤️ Bookmark favorit donghua
+          - 📊 Track watch history & progress
+          - 🔔 Notifikasi episode baru
+          - 🎨 Netflix-style UI dengan glassmorphism
+          - 🎥 Custom video player dengan multiple servers
+          - 🔍 Advanced search & filters
+          - 📅 Jadwal rilis harian
+          
+          ### 📋 Requirements
+          - iOS 17.0 or later
+          - Internet connection untuk streaming
+          - Storage untuk downloads (optional)
+          
+          ### 🔒 Checksums
+          Verify file integrity:
+          ```
+          $(cat release/checksums.txt)
+          ```
+          
+          ### 📝 Notes
+          - Unofficial app untuk personal use
+          - Konten dari Anichin.moe
+          - Install via sideloading (Scarlet/AltStore/etc)
+          
+          ---
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.version }}
+        files: |
+          release/*.ipa
+          release/checksums.txt
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
